@@ -2,17 +2,14 @@
   <div class="container">
     <div class="file-selector">
       <figure>
-        <UploadIcon />
-      </figure>
-      Select Files from Google Drive
+        <UploadIcon/>
+      </figure>Select Files from Google Drive
       <p>
         <span>Authenticate with Google Drive</span>
       </p>
-      <button type="button" @click="driveIconClicked()">
-        Connect to Google Drive
-      </button>
+      <button type="button" @click="driveIconClicked();">Connect to Google Drive</button>
     </div>
-    <AttachmentList :tempAttachments="getTempAttachments" />
+    <AttachmentList :tempAttachments="getTempAttachments"/>
   </div>
 </template>
 
@@ -27,15 +24,14 @@ export default {
       attachments: [],
       pickerApiLoaded: false,
       developerKey: "AIzaSyBwH-SfDealP62hgDgJPMQWSlqiNzOV3Gg",
-      clientId:
-        "362666266411-9dce3l8g14ggqp703jl2npk0b2v76rho.apps.googleusercontent.com",
+      clientId: "362666266411-9dce3l8g14ggqp703jl2npk0b2v76rho.apps.googleusercontent.com",
       scope: "https://www.googleapis.com/auth/drive.readonly",
-      oauthToken: null,
+      oauthToken: null
     };
   },
   components: {
     AttachmentList: AttachmentList,
-    UploadIcon,
+    UploadIcon
   },
   mounted() {
     let gDrive = document.createElement("script");
@@ -53,7 +49,7 @@ export default {
           {
             client_id: this.clientId,
             scope: this.scope,
-            immediate: false,
+            immediate: false
           },
           this.handleAuthResult
         );
@@ -92,20 +88,34 @@ export default {
       var url = "nothing";
       var name = "nothing";
       if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
-        const doc = data[google.picker.Response.DOCUMENTS][0];
-        gapi.client.drive.files
-          .get({
-            fileId: doc.id,
-            alt: "media",
-          })
-          .then(function (res) {
-            const file = new File([res.body], doc.name, { type: doc.mimeType });
-
-            // Do whatever with the file
-            console.log(file);
-          });
+        var doc = data[google.picker.Response.DOCUMENTS][0];
+        url = doc[google.picker.Document.URL];
+        name = doc.name;
+        let docs = data.docs;
+        var param = { fileId: doc.id, oAuthToken: this.oauthToken, name: name };
+        let attachments = [];
+        for (let i = 0; i < docs.length; i++) {
+          let attachment = {};
+          attachment._id = docs[i].id;
+          attachment.title = docs[i].name;
+          attachment.name = docs[i].name + "." + docs[i].mimeType.split("/")[1];
+          attachment.type = "gDrive";
+          attachment.description = "Shared with GDrive";
+          attachment.extension =
+            "." +
+            docs[i].mimeType.substring(docs[i].mimeType.lastIndexOf(".") + 1);
+          attachment.iconURL = docs[i].iconUrl;
+          attachment.size = docs[i].sizeBytes;
+          attachment.user = JSON.parse(localStorage.getItem("user"));
+          attachment.thumb = null;
+          attachment.thumb_list = null;
+          attachments.push(attachment);
+        }
+        this.tempAttachments = [...attachments];
       }
-    },
+      this.oauthToken = null;
+      this.pickerApiLoaded = false;
+    }
   },
   computed: {
     getTempAttachments() {
@@ -113,8 +123,8 @@ export default {
     },
     getAttachments() {
       return this.attachments;
-    },
-  },
+    }
+  }
 };
 </script>
 
