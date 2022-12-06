@@ -2,14 +2,17 @@
   <div class="container">
     <div class="file-selector">
       <figure>
-        <UploadIcon/>
-      </figure>Select Files from Google Drive
+        <UploadIcon />
+      </figure>
+      Select Files from Google Drive
       <p>
         <span>Authenticate with Google Drive</span>
       </p>
-      <button type="button" @click="driveIconClicked();">Connect to Google Drive</button>
+      <button type="button" @click="driveIconClicked()">
+        Connect to Google Drive
+      </button>
     </div>
-    <AttachmentList :tempAttachments="getTempAttachments"/>
+    <AttachmentList :tempAttachments="getTempAttachments" />
   </div>
 </template>
 
@@ -22,100 +25,106 @@ export default {
     return {
       tempAttachments: [],
       attachments: [],
-      pickerApiLoaded: false,
+      tokenClient: null,
+      accessToken: null,
+      gisInited: null,
+      add_id: "",
       developerKey: "AIzaSyBwH-SfDealP62hgDgJPMQWSlqiNzOV3Gg",
-      clientId: "362666266411-9dce3l8g14ggqp703jl2npk0b2v76rho.apps.googleusercontent.com",
+      clientId:
+        "362666266411-9dce3l8g14ggqp703jl2npk0b2v76rho.apps.googleusercontent.com",
       scope: "https://www.googleapis.com/auth/drive.readonly",
-      oauthToken: null
+      oauthToken: null,
     };
   },
   components: {
     AttachmentList: AttachmentList,
-    UploadIcon
+    UploadIcon,
   },
   mounted() {
     let gDrive = document.createElement("script");
     gDrive.setAttribute("type", "text/javascript");
     gDrive.setAttribute("src", "https://apis.google.com/js/api.js");
     document.head.appendChild(gDrive);
+    let client = document.createElement("script");
+    client.setAttribute("type", "text/javascript");
+    client.setAttribute("src", "https://accounts.google.com/gsi/client");
+    document.head.appendChild(client);
   },
   methods: {
-    // function called on click of drive icon
-    async driveIconClicked() {
-      console.log("Clicked");
-      await gapi.load("auth2", () => {
-        console.log("Auth2 Loaded");
-        gapi.auth2.authorize(
-          {
-            client_id: this.clientId,
-            scope: this.scope,
-            immediate: false
-          },
-          this.handleAuthResult
-        );
-      });
-      gapi.load("picker", () => {
-        console.log("Picker Loaded");
-        this.pickerApiLoaded = true;
-        this.createPicker();
-      });
+    gapiLoaded() {
+      gapi.load("client:picker", this.intializePicker);
     },
-
-    handleAuthResult(authResult) {
-      console.log("Handle Auth result");
-      if (authResult && !authResult.error) {
-        this.oauthToken = authResult.access_token;
-        this.createPicker();
+    async intializePicker() {
+      await gapi.client.load(
+        "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"
+      );
+      this.pickerInited = true;
+      this.maybeEnableButtons();
+    },
+    gisLoaded() {
+      this.tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: this.clientId,
+        scope: this.scope,
+        callback: "",
+      });
+      this.gisInited = true;
+      this.maybeEnableButtons();
+    },
+    maybeEnableButtons() {
+      if (this.pickerInited && this.gisInited) {
       }
     },
+    handleAuthClick() {
+      this.tokenClient.callback = async (response) => {
+        if (response.error !== undefined) {
+          throw response;
+        }
+        this.accessToken = response.access_token;
+        await createPicker();
+      };
 
-    // Create and render a Picker object for picking user Photos.
+      if (this.accessToken === null) {
+        // Prompt the user to select a Google Account and ask for consent to share their data
+        // when establishing a new session.
+        this.tokenClient.requestAccessToken({ prompt: "consent" });
+      } else {
+        // Skip display of account chooser and consent dialog for an existing session.
+        this.tokenClient.requestAccessToken({ prompt: "" });
+      }
+    },
     createPicker() {
-      console.log("Create Picker");
-      if (this.pickerApiLoaded && this.oauthToken) {
-        var picker = new google.picker.PickerBuilder()
-          .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
-          .addView(google.picker.ViewId.DOCS)
-          .setOAuthToken(this.oauthToken)
-          .setDeveloperKey(this.developerKey)
-          .setCallback(this.pickerCallback)
-          .build();
-        picker.setVisible(true);
-      }
+      const view = new google.picker.View(google.picker.ViewId.DOCS);
+      view.setMimeTypes("image/png,image/jpeg,image/jpg");
+      const picker = new google.picker.PickerBuilder()
+        .enableFeature(google.picker.Feature.NAV_HIDDEN)
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .setDeveloperKey(this.developerKey)
+        .setAppId(this.add_id)
+        .setOAuthToken(this.accessToken)
+        .addView(view)
+        .addView(new google.picker.DocsUploadView())
+        .setCallback(this.pickerCallback)
+        .build();
+      picker.setVisible(true);
     },
     async pickerCallback(data) {
-      console.log("PickerCallback Files : ", data);
-      var url = "nothing";
-      var name = "nothing";
-      if (data[google.picker.Response.ACTION] === google.picker.Action.PICKED) {
-        var doc = data[google.picker.Response.DOCUMENTS][0];
-        url = doc[google.picker.Document.URL];
-        name = doc.name;
-        let docs = data.docs;
-        var param = { fileId: doc.id, oAuthToken: this.oauthToken, name: name };
-        let attachments = [];
-        for (let i = 0; i < docs.length; i++) {
-          let attachment = {};
-          attachment._id = docs[i].id;
-          attachment.title = docs[i].name;
-          attachment.name = docs[i].name + "." + docs[i].mimeType.split("/")[1];
-          attachment.type = "gDrive";
-          attachment.description = "Shared with GDrive";
-          attachment.extension =
-            "." +
-            docs[i].mimeType.substring(docs[i].mimeType.lastIndexOf(".") + 1);
-          attachment.iconURL = docs[i].iconUrl;
-          attachment.size = docs[i].sizeBytes;
-          attachment.user = JSON.parse(localStorage.getItem("user"));
-          attachment.thumb = null;
-          attachment.thumb_list = null;
-          attachments.push(attachment);
-        }
-        this.tempAttachments = [...attachments];
+      if (data.action === google.picker.Action.PICKED) {
+        let text = `Picker response: \n${JSON.stringify(data, null, 2)}\n`;
+        const document = data[google.picker.Response.DOCUMENTS][0];
+        const fileId = document[google.picker.Document.ID];
+        console.log(fileId);
+        const res = await gapi.client.drive.files.get({
+          fileId: fileId,
+          fields: "*",
+        });
+        text += `Drive API response for first document: \n${JSON.stringify(
+          res.result,
+          null,
+          2
+        )}\n`;
+        console.log(text);
       }
-      this.oauthToken = null;
-      this.pickerApiLoaded = false;
-    }
+    },
   },
   computed: {
     getTempAttachments() {
@@ -123,8 +132,8 @@ export default {
     },
     getAttachments() {
       return this.attachments;
-    }
-  }
+    },
+  },
 };
 </script>
 
